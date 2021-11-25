@@ -23,7 +23,7 @@ BaseType::BaseType(void)
 //@param BaseType::DataType dtype - type of data (enum)
 //@return N/A
 //////////////////////////////////////////////////////////////////////////////
-explicit BaseType::BaseType(bool sign, unsigned int dataWidth, BaseType::DataType dType)
+BaseType::BaseType(bool sign, unsigned int dataWidth, BaseType::DataType dType)
 	: signed_(sign)
 	, dataWidth_(dataWidth)
 	, dataType_(dType)
@@ -36,7 +36,7 @@ explicit BaseType::BaseType(bool sign, unsigned int dataWidth, BaseType::DataTyp
 //@param void
 //@return N/A
 //////////////////////////////////////////////////////////////////////////////
-/*virtual*/ ~BaseType::BaseType(void) 
+/*virtual*/ BaseType::~BaseType(void) 
 {
 
 }
