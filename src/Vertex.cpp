@@ -11,7 +11,7 @@
 //@param void
 //@return N/A
 //////////////////////////////////////////////////////////////////////////////
-Vertex::Vertex(void) :op_(Operation::NOP), currDelay_(0.0), ALAPtimeFrame_(0u), ASAPtimeFrame_(0u)
+Vertex::Vertex(void) :op_(Operation::NOP), currDelay_(0.0), ALAPtimeFrame_(0u), ASAPtimeFrame_(0u), timeFrame_{0}
 {
 }
 

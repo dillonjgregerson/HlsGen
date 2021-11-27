@@ -871,12 +871,15 @@ double HlsGen::determineCriticalPath(void)
 	return longestPath;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// see header file for method desription
+//////////////////////////////////////////////////////////////////////////////
 unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
 	//if we are not in the terminal state (ie register, output etc)
-	std::cout << "entering \n";
-	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	//std::cout << "entering \n";
+	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
 	if (outputStates_.find(vtx) == outputStates_.end())
 	{
 		for (std::vector<std::string>::iterator it = dag_[vtx].begin(); it < dag_[vtx].end(); it++)
@@ -907,17 +910,20 @@ unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 	//update the vertex's asap and alap time frames (we want to update to the largest)
 	//opsDefs2_[vtx].ALAPtimeFrame_ = retVal > opsDefs2_[vtx].ALAPtimeFrame_? retVal: opsDefs2_[vtx].ALAPtimeFrame_;
 	opsDefs2_[vtx].ASAPtimeFrame_ = layer > opsDefs2_[vtx].ASAPtimeFrame_ ? layer : opsDefs2_[vtx].ASAPtimeFrame_;
-	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
-	std::cout << "exiting\n";
+	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	//std::cout << "exiting\n";
 	return retVal;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// see header file for method desription
+//////////////////////////////////////////////////////////////////////////////
 unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
 	//if we are not in the terminal state (ie register, output etc)
-	std::cout << "entering\n";
-	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	//std::cout << "entering\n";
+	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
 	unsigned int componentLatency(0);
 	if (opsDefs2_[vtx].op_ == Vertex::Operation::MULT)
 	{
@@ -936,9 +942,7 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 	{
 		for (std::vector<std::string>::iterator it = invDag_[vtx].begin(); it < invDag_[vtx].end(); it++)
 		{
-
 			retVal = getAlapTimes(*it, layer + componentLatency);
-			//retVal++;
 		}
 	}
 	else
@@ -949,40 +953,14 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 
 	//update the vertex's asap and alap time frames (we want to update to the largest)
 	opsDefs2_[vtx].ALAPtimeFrame_ = layer > opsDefs2_[vtx].ALAPtimeFrame_ ? layer : opsDefs2_[vtx].ALAPtimeFrame_;
-	std::cout << "exiting\n";
-	std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", layer: " << layer << std::endl;
+	//std::cout << "exiting\n";
+	//std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", layer: " << layer << std::endl;
 	return retVal;
 }
-//unsigned int HlsGen::getAlapTimes(std::string vtx)
-//{
-//	unsigned int retVal = 0;
-//	//if we are not in the terminal state (ie register, output etc)
-//	std::cout << "Entering:" << std::endl;
-//	std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", retVal: " << retVal << std::endl;
-//	if (outputStates_.find(vtx) == outputStates_.end())
-//	{
-//		for (std::vector<std::string>::iterator it = dag_[vtx].begin(); it < dag_[vtx].end(); it++)
-//		{
-//			retVal = getAlapTimes(*it);
-//			opsDefs2_[*it].ALAPtimeFrame_ = retVal < opsDefs2_[*it].ALAPtimeFrame_ ? retVal : opsDefs2_[*it].ALAPtimeFrame_;
-//			std::cout << *it << ", opsDefs2_[*it].ALAPtimeFrame_: " << opsDefs2_[*it].ALAPtimeFrame_ << ", retVal: " << retVal << std::endl;
-//
-//			retVal++;
-//		}
-//	}
-//	else
-//	{
-//		retVal = 0;
-//	}
-//
-//	//update the vertex's asap and alap time frames (we want to update to the largest)
-//	//opsDefs2_[vtx].ALAPtimeFrame_ = retVal <= opsDefs2_[vtx].ALAPtimeFrame_? retVal: opsDefs2_[vtx].ALAPtimeFrame_;
-//	//opsDefs2_[vtx].ASAPtimeFrame_ = layer > opsDefs2_[vtx].ASAPtimeFrame_ ? layer : opsDefs2_[vtx].ASAPtimeFrame_;
-//	std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", retVal: " << retVal << std::endl;
-//	std::cout << "Exiting:" << std::endl;
-//	return retVal;
-//}
 
+//////////////////////////////////////////////////////////////////////////////
+// see header file for method desription
+//////////////////////////////////////////////////////////////////////////////
 void HlsGen::addToInvDag(std::string vtx)
 {
 	for (std::map<std::string, std::vector<std::string>>::iterator it = dag_.begin(); it != dag_.end(); it++)
@@ -1023,6 +1001,9 @@ bool HlsGen::invertDag(void)
 	return false;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// see header file for method desription
+//////////////////////////////////////////////////////////////////////////////
 bool HlsGen::populateTimeFrames(void)
 {
 	outputStates_.clear();
@@ -1045,8 +1026,6 @@ bool HlsGen::populateTimeFrames(void)
 			num_iteration_ = 0;
 			unsigned int layer(0);
 			getAsapTimes(it->first, layer);
-			//layer = 0;
-			//getAlapTimes(it->first, layer);
 		}
 	}
 
@@ -1069,30 +1048,26 @@ bool HlsGen::populateTimeFrames(void)
 		{
 			num_iteration_ = 0;
 			unsigned int layer(0);
-			//getAsapTimes(it->first, layer);
-			layer = 0;
 			getAlapTimes(it->first, layer);
 		}
 	}
 
-	bool validLatency(true);
+	bool validLatency = true;
+	
 	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
-		//std::cout << it->first << " - alap time: " << it->second.ALAPtimeFrame_ << std::endl;
 		if ((it->second.ALAPtimeFrame_ > latency_) || (it->second.ASAPtimeFrame_ > latency_))
 		{
 			validLatency = false;
 		}
 		else
 		{
-			latency_ = 5;
 			it->second.ALAPtimeFrame_ = latency_ - it->second.ALAPtimeFrame_;
 			it->second.timeFrame_[0] = it->second.ASAPtimeFrame_;
 			it->second.timeFrame_[1] = it->second.ALAPtimeFrame_;
 		}
 		std::cout << it->first << " : [" << it->second.timeFrame_[0] << ", " << it->second.timeFrame_[1] << "]" << std::endl;
 	}
-
 	return validLatency;
 }
 //////////////////////////////////////////////////////////////////////////////

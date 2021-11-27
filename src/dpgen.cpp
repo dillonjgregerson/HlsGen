@@ -51,7 +51,12 @@ int main(int argc, char* argv[])
 		std::cout << "Critical Path : " << hlsgen.determineCriticalPath() << " ns\n";
 	}
 	//todo add error checking
-	hlsgen.latency_ = (int)argv[3];
+	hlsgen.latency_ = std::stoi(argv[3]);
+
 	hlsgen.invertDag();
-	bool latencyConstraint = hlsgen.populateTimeFrames();
+	if (!hlsgen.populateTimeFrames())
+	{
+		std::cout << "That is an invalid latency! The circuit cannot fit\n";
+	}
+
 }
