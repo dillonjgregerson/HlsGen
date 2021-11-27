@@ -85,7 +85,7 @@ unsigned int HlsGen::parseFile(std::string filename)
 	circuitName_ = filename;
 
 	unsigned int retVal = 0;
-	if(!parseConditionals(invalidLines, filename))
+	if (!parseConditionals(invalidLines, filename))
 	{
 		retVal = 1;
 	}
@@ -241,7 +241,7 @@ bool HlsGen::parseInputLine(std::string line, std::map<std::string, BaseType>& d
 //////////////////////////////////////////////////////////////////////////////
 
 
-bool HlsGen::parseConditionals(std::vector<unsigned int>&invalidLines, std::string fileName)
+bool HlsGen::parseConditionals(std::vector<unsigned int>& invalidLines, std::string fileName)
 {
 	std::map<std::string, std::vector<std::string>>conditionalMap;
 	unsigned int stateNum;
@@ -259,7 +259,7 @@ bool HlsGen::parseConditionals(std::vector<unsigned int>&invalidLines, std::stri
 		while (getline(file, line))
 		{
 			retVal = (parseConditionalLine(line, state, stateNum) && retVal);
-			if(retVal == 1)
+			if (retVal == 1)
 			{
 				invalidLines.push_back(a);
 			}
@@ -271,10 +271,10 @@ bool HlsGen::parseConditionals(std::vector<unsigned int>&invalidLines, std::stri
 	return retVal;
 }
 
-bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseState &currState, 
-								  unsigned int nested)
+bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseState& currState,
+	unsigned int nested)
 {
-    std::string s = line + " "; //add ' ' for string parsing
+	std::string s = line + " "; //add ' ' for string parsing
 	bool lineValid(false);
 
 	std::vector<std::string>varNames;
@@ -291,8 +291,8 @@ bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseStat
 		switch (currState)
 		{
 			std::cout << "state: " << (int)currState << std::endl;
-			std::cout << "substring: " << substring << std::endl; 
-			std::cout << "conditional: " << conditional << std::endl; 
+			std::cout << "substring: " << substring << std::endl;
+			std::cout << "conditional: " << conditional << std::endl;
 		case ConditionalParseState::IDLE:
 			if (substring == "if")
 			{
@@ -306,15 +306,15 @@ bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseStat
 			}
 			break;
 		case ConditionalParseState::PARENTHESIS1:
-		    if (substring == "(")
+			if (substring == "(")
 			{
-                currState = ConditionalParseState::CONDITIONAL;
+				currState = ConditionalParseState::CONDITIONAL;
 			}
 		case ConditionalParseState::CONDITIONAL:
-		    if (substring != ")")
+			if (substring != ")")
 			{
 				conditional += substring;
-                currState = ConditionalParseState::CONDITIONAL;
+				currState = ConditionalParseState::CONDITIONAL;
 			}
 			else
 			{
@@ -322,15 +322,15 @@ bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseStat
 			}
 			break;
 		case ConditionalParseState::BRACKETS:
-		    if (substring == "{")
+			if (substring == "{")
 			{
-                currState = ConditionalParseState::OPERATION;
+				currState = ConditionalParseState::OPERATION;
 			}
 			break;
 		case ConditionalParseState::OPERATION:
-		    if (substring == "}")
+			if (substring == "}")
 			{
-                currState = ConditionalParseState::OPERATION;
+				currState = ConditionalParseState::OPERATION;
 			}
 			else
 			{
@@ -692,9 +692,9 @@ bool HlsGen::generateVerilog(std::string outputFile)
 	writeDataDefinitions(outdata);
 	bool retVal = false;
 	retVal = writeOperations(outdata);
-        if(retVal == false)
-        {
-	    std::cout << "error: missing data declaration detected\n";
+	if (retVal == false)
+	{
+		std::cout << "error: missing data declaration detected\n";
 	}
 	outdata << "\nendmodule\n";
 	outdata.close();
@@ -875,13 +875,28 @@ unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
 	//if we are not in the terminal state (ie register, output etc)
+	std::cout << "entering \n";
 	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
 	if (outputStates_.find(vtx) == outputStates_.end())
 	{
 		for (std::vector<std::string>::iterator it = dag_[vtx].begin(); it < dag_[vtx].end(); it++)
 		{
-			retVal = getAsapTimes(*it, layer+1);
-			//retVal++;
+			unsigned int componentLatency;
+			if (opsDefs2_[vtx].op_ == Vertex::Operation::MULT)
+			{
+				componentLatency = 2;
+			}
+			else if (opsDefs2_[vtx].op_ == Vertex::Operation::DIV ||
+				opsDefs2_[vtx].op_ == Vertex::Operation::MOD)
+			{
+				componentLatency = 3;
+			}
+			else
+			{
+				componentLatency = 1;
+			}
+
+			retVal = getAsapTimes(*it, layer + componentLatency);
 		}
 	}
 	else
@@ -891,8 +906,9 @@ unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 
 	//update the vertex's asap and alap time frames (we want to update to the largest)
 	//opsDefs2_[vtx].ALAPtimeFrame_ = retVal > opsDefs2_[vtx].ALAPtimeFrame_? retVal: opsDefs2_[vtx].ALAPtimeFrame_;
-	opsDefs2_[vtx].ASAPtimeFrame_ = layer  > opsDefs2_[vtx].ASAPtimeFrame_? layer: opsDefs2_[vtx].ASAPtimeFrame_;
-		std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	opsDefs2_[vtx].ASAPtimeFrame_ = layer > opsDefs2_[vtx].ASAPtimeFrame_ ? layer : opsDefs2_[vtx].ASAPtimeFrame_;
+	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	std::cout << "exiting\n";
 	return retVal;
 }
 
@@ -900,12 +916,28 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
 	//if we are not in the terminal state (ie register, output etc)
-	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	std::cout << "entering\n";
+	std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+	unsigned int componentLatency(0);
+	if (opsDefs2_[vtx].op_ == Vertex::Operation::MULT)
+	{
+		componentLatency = 2;
+	}
+	else if (opsDefs2_[vtx].op_ == Vertex::Operation::DIV ||
+		opsDefs2_[vtx].op_ == Vertex::Operation::MOD)
+	{
+		componentLatency = 3;
+	}
+	else
+	{
+		componentLatency = 1;
+	}
 	if (outputStates_.find(vtx) == outputStates_.end())
 	{
 		for (std::vector<std::string>::iterator it = invDag_[vtx].begin(); it < invDag_[vtx].end(); it++)
 		{
-			retVal = getAlapTimes(*it, layer + 1);
+
+			retVal = getAlapTimes(*it, layer + componentLatency);
 			//retVal++;
 		}
 	}
@@ -913,9 +945,11 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 	{
 		retVal = 0;
 	}
+	layer = layer + componentLatency - 1; //because we need to factor in the amount of time it takes to run this component
 
 	//update the vertex's asap and alap time frames (we want to update to the largest)
 	opsDefs2_[vtx].ALAPtimeFrame_ = layer > opsDefs2_[vtx].ALAPtimeFrame_ ? layer : opsDefs2_[vtx].ALAPtimeFrame_;
+	std::cout << "exiting\n";
 	std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", layer: " << layer << std::endl;
 	return retVal;
 }
@@ -959,8 +993,8 @@ void HlsGen::addToInvDag(std::string vtx)
 			{
 				if (std::count(invDag_[vtx].begin(), invDag_[vtx].end(), it->first) == 0)
 				{
-				    invDag_[vtx].push_back(it->first);
-				    addToInvDag(it->first);
+					invDag_[vtx].push_back(it->first);
+					addToInvDag(it->first);
 				}
 			}
 		}
@@ -1000,7 +1034,7 @@ bool HlsGen::populateTimeFrames(void)
 			//here we look up the operation using the key we are iterating through (ie 'x'), then we check
 			//if the input to that output was added to our list of registers, if it was not then we will add it 
 			//to our list of outputs
-				outputStates_.insert(it->first);
+			outputStates_.insert(it->first);
 		}
 	}
 
@@ -1051,8 +1085,8 @@ bool HlsGen::populateTimeFrames(void)
 		}
 		else
 		{
-		    latency_ = 5;
-		    it->second.ALAPtimeFrame_ =  latency_ - it->second.ALAPtimeFrame_;
+			latency_ = 5;
+			it->second.ALAPtimeFrame_ = latency_ - it->second.ALAPtimeFrame_;
 			it->second.timeFrame_[0] = it->second.ASAPtimeFrame_;
 			it->second.timeFrame_[1] = it->second.ALAPtimeFrame_;
 		}
