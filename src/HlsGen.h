@@ -47,6 +47,17 @@ public:
 		COMPLETE
 	};
 
+	enum class ConditionalParseState
+	{
+		IDLE,
+		IF,
+		ELSE,
+		PARENTHESIS1,
+		CONDITIONAL,
+		BRACKETS,
+		OPERATION
+	};
+
 	struct DataProp
 	{
 		unsigned int dataSize;
@@ -126,6 +137,24 @@ public:
 	bool parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsDefs);
 
 	//////////////////////////////////////////////////////////////////////////////
+	//@brief parse individual line for operations
+	//@param std::string line
+	//@param std::map<unsigned int, Vertex>&condionalMap
+	//@param std::map<unsigned int, Vertex>& opsDefs
+	//@return bool returns true on success, false otherwise
+	//////////////////////////////////////////////////////////////////////////////
+    bool parseConditionals(std::vector<unsigned int>&invalidLines, std::string fileName);
+
+	//////////////////////////////////////////////////////////////////////////////
+	//@brief parse individual line for operations
+	//@param std::string line
+	//@param std::map<unsigned int, Vertex>&condionalMap
+	//@param std::map<unsigned int, Vertex>& opsDefs
+	//@return bool returns true on success, false otherwise
+	//////////////////////////////////////////////////////////////////////////////
+	bool parseConditionalLine(std::string, HlsGen::ConditionalParseState& currState, unsigned int);
+
+	//////////////////////////////////////////////////////////////////////////////
 	//@brief write the verilog header to file
     //@param std::ofstream& outputStream
 	//@return void
@@ -196,6 +225,14 @@ public:
 	//@return bool - true if input string is a number, false otherwise
 	//////////////////////////////////////////////////////////////////////////////
 	bool isNumber(const std::string& str);
+	
+	bool populateTimeFrames(void);
+	unsigned int getAsapTimes(std::string input, unsigned int layer);
+	unsigned int getAlapTimes(std::string vtx, unsigned int layer);
+	bool invertDag(void);
+	void addToInvDag(std::string);
+	std::map<std::string, std::vector<std::string>>invDag_;
+	unsigned int latency_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
