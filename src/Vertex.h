@@ -87,7 +87,11 @@ public:
     //class members
     std::string inputs_[3];
 	std::string output_;
+	std::vector<std::string>conditionals_;
+	unsigned int timeFrame_[2];
 	double currDelay_;
+	unsigned int ALAPtimeFrame_;
+	unsigned int ASAPtimeFrame_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

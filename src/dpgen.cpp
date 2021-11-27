@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 {
 	HlsGen hlsgen;
 	unsigned int retVal = hlsgen.parseFile(argv[1]);
-	if (argc != 3)
+	if (argc != 4)
 	{
 		std::cout << "error: invalid input arguments\n Correct usage: dpgen <netlist file> <output file (.v)>\n";
 		return 0;
@@ -50,4 +50,13 @@ int main(int argc, char* argv[])
 		hlsgen.createDag();
 		std::cout << "Critical Path : " << hlsgen.determineCriticalPath() << " ns\n";
 	}
+	//todo add error checking
+	hlsgen.latency_ = std::stoi(argv[3]);
+
+	hlsgen.invertDag();
+	if (!hlsgen.populateTimeFrames())
+	{
+		std::cout << "That is an invalid latency! The circuit cannot fit\n";
+	}
+
 }
