@@ -11,7 +11,13 @@
 //@param void
 //@return N/A
 //////////////////////////////////////////////////////////////////////////////
-Vertex::Vertex(void) :op_(Operation::NOP), currDelay_(0.0), ALAPtimeFrame_(0u), ASAPtimeFrame_(0u), timeFrame_{0}
+Vertex::Vertex(void) :
+	op_(Operation::NOP), 
+	currDelay_(0.0), 
+	ALAPtimeFrame_(0u), 
+	ASAPtimeFrame_(0u), 
+	timeFrame_{0},
+	selfForceVector{0.0f}
 {
 }
 
@@ -264,5 +270,41 @@ std::string Vertex::printOp(std::map<std::string, BaseType>& dataDefs, unsigned 
 	return retString;
 }
 
+double Vertex::prob(unsigned int timeFrame)
+{
+	double retProb = 0.0;
+	if(timeFrame <= ALAPtimeFrame_ && timeFrame >= ASAPtimeFrame_)
+	{
+        retProb = 1.0/(double)(ALAPtimeFrame_ - ASAPtimeFrame_ + 1);
+	}
+	else
+	{
+		retProb = 0.0;
+	}
+	return retProb;
+}
+void Vertex::initSelfForce(unsigned int numTimeFrames)
+{
+}
+
+void Vertex::setSelfForce(float selfForce, unsigned int idx)
+{
+	std::cout << "idx: " << idx << std::endl;
+	selfForceVector[idx] = selfForce;
+}
+
+bool Vertex::inRange(unsigned int timeFrame)const
+{
+	bool isInRange = true;
+	if (timeFrame <= ALAPtimeFrame_ && timeFrame >= ASAPtimeFrame_)
+	{
+		isInRange = true;
+	}
+	else
+	{
+		isInRange = false;
+	}
+	return isInRange;
+}
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////

@@ -1070,5 +1070,294 @@ bool HlsGen::populateTimeFrames(void)
 	}
 	return validLatency;
 }
+//auxiliary method to determine if the op is grouped into ALU/MULT/ or other
+
+short HlsGen::isALU(Vertex::Operation op)
+{
+	short retVal = -1;
+	switch (op)
+	{
+		case Vertex::Operation::ADD:
+		case Vertex::Operation::SUB:
+		case Vertex::Operation::COMP:
+		case Vertex::Operation::COMP_EQ:
+		case Vertex::Operation::COMP_LT:
+		case Vertex::Operation::COMP_GT:
+		case Vertex::Operation::MUX2x1:	    
+		case Vertex::Operation::SHR:
+		case Vertex::Operation::SHL:
+		case Vertex::Operation::INC:
+		case Vertex::Operation::DEC:
+			retVal = 1;
+			break;
+		case Vertex::Operation::MULT:
+		case Vertex::Operation::DIV:
+		case Vertex::Operation::MOD:
+			retVal = 0;
+			break;
+		case Vertex::Operation::ASSIGN:
+		case Vertex::Operation::NOP:
+		case Vertex::Operation::REG:
+			retVal = 1;
+			break;
+	}
+	return retVal;	
+}
+
+void HlsGen::setLatency(const unsigned int latency)
+{
+	latency_ = latency;
+	for (int i = 0; i < latency; i++)
+	{
+		aluProbDistVec_.push_back(0.0);
+		multProbDistVec_.push_back(0.0);
+		otherProbDistVec_.push_back(0.0);
+		schedule_[i] = {};
+	}
+}
+
+bool HlsGen::performScheduling(void)
+{
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		itr->second.initSelfForce(latency_);
+	}
+	std::cout << "printing x dependencies" << std::endl;
+	for (std::vector<std::string>::iterator itr = dag_["x"].begin(); itr != dag_["x"].end(); itr++)
+	{
+		std::cout << *itr << " ";
+	}
+	std::cout << std::endl;
+
+std::cout << "printing dependencies on x" << std::endl;
+	for (std::vector<std::string>::iterator itr = invDag_["x"].begin(); itr != invDag_["x"].end(); itr++)
+	{
+		std::cout << *itr << " ";
+	}
+	std::cout << std::endl;
+
+	calculateDistributions();
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		if (dataDefs_[itr->first].dataType_ != BaseType::DataType::INPUT)
+		{
+			calculateSelfForces();
+ 			scheduleNode(itr->first, itr->second);
+		}
+	}
+	for (int i = 0; i < latency_+1; i++)
+	{
+		std::cout << "timeframe " << i << ": ";
+		for (std::vector<std::string>::iterator itr = schedule_[i].begin(); itr != schedule_[i].end(); itr++)
+		{
+			std::cout << *itr << " ";
+		}
+		std::cout << std::endl;
+	}
+	return true;
+}
+
+void HlsGen::scheduleNode(std::string vtxName, Vertex& vtx)
+{
+	std::vector<float> totalForce;
+	for (int i = 0; i < latency_; i++)
+	{
+		//std::cout << "////////////////////\n";
+		std::cout << "self force:" << i << " ";
+		//	//initialize total forces as the self force at each time frame
+		totalForce.push_back(vtx.selfForceVector[i]);
+		std::cout << vtx.selfForceVector[i] << " " << std::endl;
+	}
+
+	for (int i = 0; i < latency_; i++)
+	{
+		//	//get precedessor forces at each time step using the inverted DAG 
+		float predecessorForces = 0.0;
+		for (std::vector<std::string>::iterator itr = invDag_[vtxName].begin(); itr != invDag_[vtxName].end(); itr++)
+		{
+			// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+			// at timeFrame i, add in the self force of it's predecessor at time frame i.
+			if (opsDefs2_[*itr].inRange(i))
+			{
+				predecessorForces += opsDefs2_[*itr].selfForceVector[i];
+			}
+		}
+		totalForce.at(i) += predecessorForces;
+
+		//get successor forces at each time step using the inverted DAG 
+		float successorForces = 0.0;
+		for (std::vector<std::string>::iterator itr = dag_[vtxName].begin(); itr != dag_[vtxName].end(); itr++)
+		{
+			// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+			// at timeFrame i, add in the self force of it's predecessor at time frame i.
+			if (opsDefs2_[*itr].inRange(i))
+			{
+				successorForces += opsDefs2_[*itr].selfForceVector[i];
+			}
+		}
+		totalForce.at(i) += successorForces;
+	}
+	int minIndex = opsDefs2_[vtxName].ASAPtimeFrame_;
+
+	for (int i = opsDefs2_[vtxName].ASAPtimeFrame_; i < opsDefs2_[vtxName].ALAPtimeFrame_; i++)
+	{
+		if (totalForce[i] < totalForce[minIndex])
+		{
+			minIndex = i;
+		}
+	}
+
+	schedule_[minIndex-1].push_back(vtxName);
+	vtx.ALAPtimeFrame_ = minIndex;
+	vtx.ASAPtimeFrame_ = minIndex;
+
+	for (std::vector<std::string>::iterator itr = invDag_[vtxName].begin(); itr != invDag_[vtxName].end(); itr++)
+	{
+		// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+		// at timeFrame i, add in the self force of it's predecessor at time frame i.
+		if (opsDefs2_[*itr].inRange(minIndex))
+		{
+			opsDefs2_[*itr].ALAPtimeFrame_ = minIndex-1; //its frame no longer includes minElementIndex + 1
+		}
+	}
+
+	for (std::vector<std::string>::iterator itr = dag_[vtxName].begin(); itr != dag_[vtxName].end(); itr++)
+	{
+		// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+		// at timeFrame i, add in the self force of it's predecessor at time frame i.
+		if (opsDefs2_[*itr].inRange(minIndex))
+		{
+			opsDefs2_[*itr].ASAPtimeFrame_ = minIndex + 1;
+		}
+	}
+}
+
+void HlsGen::calculateSelfForces(void)
+{
+	std::cout << latency_ << std::endl;
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		//initialize vectors
+
+		//std::cout << itr->first << std::endl;
+		if (isALU(itr->second.op_) == 1)
+		{
+			//std::cout << itr->first << std::endl;
+			//std::cout << "IsALU!\n";
+			for (int i = 0; i < latency_; i++)
+			{
+				//std::cout << itr->second.prob(i + 1) << std::endl;
+				float selfForce = 0.0f;
+				for (int j = 0; j < latency_; j++)
+				{
+					if (i == j)
+					{
+						//std::cout << "aluProbDistVec_[j]: " << aluProbDistVec_[j] << ", (1 - itr->second.prob(j + 1)): "
+						//	<< (1 - itr->second.prob(j + 1)) << std::endl;
+
+						selfForce += aluProbDistVec_[j] * (1 - itr->second.prob(j + 1));
+					}
+					else
+					{
+						//std::cout << "aluProbDistVec_[j]: " << aluProbDistVec_[j] << ", (0 - itr->second.prob(j + 1)): "
+						//	<< (0 - itr->second.prob(j + 1)) << std::endl;
+						selfForce += aluProbDistVec_[j] * (0 - itr->second.prob(j + 1));
+					}
+				}
+			std::cout << "i : " << i << " : " << selfForce << std::endl;
+
+			itr->second.setSelfForce(selfForce, i);
+			}
+		}
+		else if (isALU(itr->second.op_) == 0)
+		{
+			std::cout << "IsMult!\n";
+			for (int i = 0; i < latency_; i++)
+			{
+				std::cout << itr->second.prob(i + 1) << std::endl;
+				float selfForce = 0.0f;
+				for (int j = 0; j < latency_; j++)
+				{
+					if (i == j)
+					{
+						selfForce += multProbDistVec_[j] * (1 - itr->second.prob(j + 1));
+					}
+					else
+					{
+						selfForce += multProbDistVec_[j] * (0 - itr->second.prob(j + 1));
+					}
+				}
+				itr->second.setSelfForce(selfForce, i);
+			}
+		}
+		else if (isALU(itr->second.op_) == -1)
+		{
+			std::cout << "IsOther!\n";
+			for (int i = 0; i < latency_; i++)
+			{
+				itr->second.setSelfForce(0.0, i);
+			}
+		}
+	}
+}
+void HlsGen::calculateDistributions(void)
+{
+    std::cout << latency_ << std::endl;
+	for (int i = 0; i < latency_; i++)
+	{
+		aluProbDistVec_[i] = 0.0f;
+		multProbDistVec_[i] = 0.0f;
+		otherProbDistVec_[i] = 0.0f;
+	}
+	for(std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		std::cout << itr->first << std::endl;
+        if(isALU(itr->second.op_) == 1)
+		{
+			std::cout << "IsALU!\n";
+			for(int i = 0 ; i < latency_; i++)
+			{
+				std::cout << itr->second.prob(i+1) << std::endl;
+            	aluProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+	    else if(isALU(itr->second.op_) == 0)
+		{
+			std::cout << "IsMult!\n";
+			for(int i = 0 ; i < latency_; i++)
+			{
+				std::cout << itr->second.prob(i+1) << std::endl;
+            	multProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+		else if(isALU(itr->second.op_) == -1)
+		{
+			std::cout << "IsOther!\n";
+			for(int i = 0 ; i < latency_; i++)
+			{
+				std::cout << itr->second.prob(i+1) << std::endl;
+
+            	otherProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+	}
+
+std::cout << "aluProbDistVec_: [" << ""; 
+	for (int i = 0; i < latency_; i++)
+	{
+		std::cout << aluProbDistVec_[i] << " ";
+	}
+std::cout << "]" << std::endl << "multProbDistVec_: [";
+	for (int i = 0; i < latency_; i++)
+	{
+		std::cout << multProbDistVec_[i] << " ";
+	}
+std::cout << "]" << std::endl << "otherProbDistVec_: [";
+	for (int i = 0; i < latency_; i++)
+	{
+		std::cout << otherProbDistVec_[i] << " ";
+	}
+	std::cout << "]" << std::endl;
+}
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////

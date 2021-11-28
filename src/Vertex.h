@@ -84,6 +84,12 @@ public:
 	//////////////////////////////////////////////////////////////////////////////
 	static bool isNumber(const std::string& str);
 
+	double prob(unsigned int timeFrame);
+
+	void initSelfForce(unsigned int numTimeFrames);
+
+	void setSelfForce(float selfForce, unsigned int idx);
+	bool inRange(unsigned int timeFrame) const;
     //class members
     std::string inputs_[3];
 	std::string output_;
@@ -92,6 +98,8 @@ public:
 	double currDelay_;
 	unsigned int ALAPtimeFrame_;
 	unsigned int ASAPtimeFrame_;
+
+	float selfForceVector[100];
 };
 
 //////////////////////////////////////////////////////////////////////////////

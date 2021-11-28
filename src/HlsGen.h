@@ -226,12 +226,32 @@ public:
 	//////////////////////////////////////////////////////////////////////////////
 	bool isNumber(const std::string& str);
 	
+	//////////////////////////////////////////////////////////////////////////////
+	//@brief checks to see if a string is a number
+    //@param const std::string& str
+	//@return bool - true if input string is a number, false otherwise
+	//////////////////////////////////////////////////////////////////////////////
+	void setLatency(const unsigned int latency);
+
 	bool populateTimeFrames(void);
 	unsigned int getAsapTimes(std::string input, unsigned int layer);
 	unsigned int getAlapTimes(std::string vtx, unsigned int layer);
 	bool invertDag(void);
 	void addToInvDag(std::string);
+	static short isALU(Vertex::Operation op);
+	bool performScheduling(void);
+    void calculateDistributions(void);
+	void calculateSelfForces(void);
+	void scheduleNode(std::string vtxName, Vertex& vtx);
 	std::map<std::string, std::vector<std::string>>invDag_;
+	std::vector<float>aluProbDistVec_;
+	std::vector<float>multProbDistVec_;
+	std::vector<float>otherProbDistVec_;
+
+	std::map<unsigned int, std::vector<std::string>>schedule_;
+	std::map<unsigned int, std::vector<std::string>>multSchedule_;
+
+protected:
 	unsigned int latency_;
 };
 
