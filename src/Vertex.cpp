@@ -17,7 +17,7 @@ Vertex::Vertex(void) :
 	ALAPtimeFrame_(0u), 
 	ASAPtimeFrame_(0u), 
 	timeFrame_{0},
-	selfForceVector{0.0f}
+	inputs_{""}
 {
 }
 
@@ -289,7 +289,7 @@ void Vertex::initSelfForce(unsigned int numTimeFrames)
 
 void Vertex::setSelfForce(float selfForce, unsigned int idx)
 {
-	std::cout << "idx: " << idx << std::endl;
+	//std::cout << "idx: " << idx << std::endl;
 	selfForceVector[idx] = selfForce;
 }
 

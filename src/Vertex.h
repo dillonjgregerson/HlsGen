@@ -13,6 +13,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <stack>
 #include "BaseType.h"
 
 class Vertex
@@ -91,15 +92,20 @@ public:
 	void setSelfForce(float selfForce, unsigned int idx);
 	bool inRange(unsigned int timeFrame) const;
     //class members
-    std::string inputs_[3];
+    std::string inputs_[8];
 	std::string output_;
-	std::vector<std::string>conditionals_;
+	std::string outputVar_;
 	unsigned int timeFrame_[2];
 	double currDelay_;
 	unsigned int ALAPtimeFrame_;
 	unsigned int ASAPtimeFrame_;
 
 	float selfForceVector[100];
+	std::string rawLine;
+	std::stack<std::pair<std::string, std::string>>conditionals_;
+	std::vector<std::pair<std::string, std::string>>conditionalVec_;
+	std::string conditionalAr[8];
+	unsigned int conditionalDepth_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

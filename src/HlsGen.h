@@ -54,9 +54,11 @@ public:
 		ELSE,
 		PARENTHESIS1,
 		CONDITIONAL,
+		PARENTHESIS2,
 		BRACKETS,
 		OPERATION
-	};
+	}
+	currState_;
 
 	struct DataProp
 	{
@@ -143,16 +145,14 @@ public:
 	//@param std::map<unsigned int, Vertex>& opsDefs
 	//@return bool returns true on success, false otherwise
 	//////////////////////////////////////////////////////////////////////////////
-    bool parseConditionals(std::vector<unsigned int>&invalidLines, std::string fileName);
+    bool parseConditionals(std::string line);
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief parse individual line for operations
 	//@param std::string line
-	//@param std::map<unsigned int, Vertex>&condionalMap
-	//@param std::map<unsigned int, Vertex>& opsDefs
 	//@return bool returns true on success, false otherwise
 	//////////////////////////////////////////////////////////////////////////////
-	bool parseConditionalLine(std::string, HlsGen::ConditionalParseState& currState, unsigned int);
+	bool parseConditionalLine(std::string line);
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief write the verilog header to file
@@ -250,7 +250,11 @@ public:
 
 	std::map<unsigned int, std::vector<std::string>>schedule_;
 	std::map<unsigned int, std::vector<std::string>>multSchedule_;
+	std::stack<std::pair<std::string, std::string>>conditionalStack_;
+	std::vector<std::pair<std::string, std::string>>conditionalVec_;
 
+	std::map<std::string, std::vector<std::string>>conditionalDependencies_;
+	void printOps(void);
 protected:
 	unsigned int latency_;
 };

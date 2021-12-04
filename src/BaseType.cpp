@@ -66,6 +66,9 @@ std::string BaseType::printDataType()
 	case DataType::REGISTER:
 		retString = "wire";
 		break;
+	case DataType::VARIABLE:
+		retString = "variable";
+		break;
 	default:
 		break;
 	}
