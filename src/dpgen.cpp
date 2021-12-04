@@ -37,10 +37,10 @@ int main(int argc, char* argv[])
 		std::cout << "error: annot find input file (argument 1), please ensure correct file path to netlist file\n";
 		return 0;
 	}
-	else if (retVal == 2)
-	{
-		std::cout << "error: invalid operator in netlist\n";
-	}
+	//else if (retVal == 2)
+	//{
+	//	std::cout << "error: invalid operator in netlist\n";
+	//}
 
 	else
 	{

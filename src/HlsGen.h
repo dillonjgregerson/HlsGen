@@ -235,6 +235,7 @@ public:
 
 	bool populateTimeFrames(void);
 	unsigned int getAsapTimes(std::string input, unsigned int layer);
+	unsigned int getAsapTimes2(std::string input, unsigned int layer);
 	unsigned int getAlapTimes(std::string vtx, unsigned int layer);
 	bool invertDag(void);
 	void addToInvDag(std::string);
@@ -247,11 +248,13 @@ public:
 	std::vector<float>aluProbDistVec_;
 	std::vector<float>multProbDistVec_;
 	std::vector<float>otherProbDistVec_;
+	bool HlsGen::updateDag(void);
 
 	std::map<unsigned int, std::vector<std::string>>schedule_;
 	std::map<unsigned int, std::vector<std::string>>multSchedule_;
 	std::stack<std::pair<std::string, std::string>>conditionalStack_;
 	std::vector<std::pair<std::string, std::string>>conditionalVec_;
+	std::string conditional_;
 
 	std::map<std::string, std::vector<std::string>>conditionalDependencies_;
 	void printOps(void);
