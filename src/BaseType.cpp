@@ -27,6 +27,7 @@ BaseType::BaseType(bool sign, unsigned int dataWidth, BaseType::DataType dType)
 	: signed_(sign)
 	, dataWidth_(dataWidth)
 	, dataType_(dType)
+	, original(false)
 {
 
 }
@@ -58,16 +59,16 @@ std::string BaseType::printDataType()
 		retString = "input";
 		break;
 	case DataType::OUTPUT:
-		retString = "output";
+		retString = "output reg";
 		break;
 	case DataType::WIRE:
-		retString = "wire";
+		retString = "reg";
 		break;
 	case DataType::REGISTER:
-		retString = "wire";
+		retString = "reg";
 		break;
 	case DataType::VARIABLE:
-		retString = "variable";
+		retString = "reg";
 		break;
 	default:
 		break;
