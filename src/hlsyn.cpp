@@ -23,8 +23,10 @@
 int main(int argc, char* argv[])
 {
 	HlsGen hlsgen;
+
 	unsigned int retVal = hlsgen.parseFile(argv[1]);
 	hlsgen.setLatency(std::stoi(argv[3]));
+	unsigned int prevLatency = std::stoi(argv[3]);
 
 	if (argc != 4)
 	{
@@ -33,13 +35,13 @@ int main(int argc, char* argv[])
 	}
 	else if (retVal == 1)
 	{
-		std::cout << "error: annot find input file (argument 1), please ensure correct file path to netlist file\n";
+		std::cout << "error: cannot find input file (argument 1), please ensure correct file path to netlist file\n";
 		return 0;
 	}
-	//else if (retVal == 2)
-	//{
-	//	std::cout << "error: invalid operator in netlist\n";
-	//}
+	else if (retVal == 2)
+	{
+		std::cout << "error occurred while parsing file\n";
+	}
 
 	else
 	{
@@ -50,7 +52,8 @@ int main(int argc, char* argv[])
 
 		if (!hlsgen.populateTimeFrames())
 		{
-			std::cout << "That is an invalid latency! The circuit cannot fit\n";
+			std::cout <<"error: " << prevLatency << " cycles is not sufficient to meet latency constriants! \nIncreasing to " 
+				<< hlsgen.latency_ << " cycles to meet latency constraints.\n";
 		}
 	
 		if(!hlsgen.performScheduling())

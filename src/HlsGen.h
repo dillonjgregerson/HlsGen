@@ -84,6 +84,7 @@ public:
 	std::string fileName_;
 	std::string circuitName_;
 	std::map<int, int> bitsMapping_;
+	unsigned int latency_;
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief default constructor
@@ -248,7 +249,7 @@ public:
 	std::vector<float>aluProbDistVec_;
 	std::vector<float>multProbDistVec_;
 	std::vector<float>otherProbDistVec_;
-	bool HlsGen::updateDag(void);
+	bool updateDag(void);
 
 	std::map<unsigned int, std::vector<std::string>>schedule_;
 	std::map<unsigned int, std::vector<std::string>>multSchedule_;
@@ -259,7 +260,6 @@ public:
 	std::map<std::string, std::vector<std::string>>conditionalDependencies_;
 	void printOps(void);
 protected:
-	unsigned int latency_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

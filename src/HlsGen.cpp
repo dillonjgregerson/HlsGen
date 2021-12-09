@@ -142,6 +142,7 @@ bool HlsGen::parseOps(std::vector<unsigned int>invalidLines, std::string fileNam
 	std::ifstream file(fileName.c_str());
 	bool retVal(true);
 	bool isConditionalLine(false);
+	bool opsValid(true);
 	// first open the file to parse out the data types
 	if (file.is_open())
 	{
@@ -158,14 +159,18 @@ bool HlsGen::parseOps(std::vector<unsigned int>invalidLines, std::string fileNam
 					isConditionalLine = parseConditionalLine(line);
 					if (!isConditionalLine)
 					{
-				    retVal = (parseOpsLine(line, opsDefs_) && retVal);
+						retVal = parseOpsLine(line, opsDefs_) ;
+						if (!retVal)
+						{
+							opsValid = false;
+						}
 					}
 				}
 			}
 			a++;
 		}
 	}
-	return retVal;
+	return opsValid;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -366,7 +371,7 @@ bool HlsGen::parseConditionalLine(std::string line)
 //////////////////////////////////////////////////////////////////////////////
 bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsDefs)
 {
-	bool retVal(false);
+	bool retVal(true);
 	std::string s = line + " |"; //add ' ' for string parsing
 	std::string delim = " ";
 	//std::map<>
@@ -508,10 +513,28 @@ bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsD
 		{
 		opsDefs2_[newElement.output_] = newElement;
 		}
-	}
-	if(retVal)
-	{
 		opsDefs2_[newElement.output_].rawLine = line;
+		if (dataDefs_.count(outputVar) == 0)
+		{
+			retVal = false;
+			std::cout << "error: " << outputVar << " not defined\n";
+		}
+		if (dataDefs_.count(dataVar1) == 0)
+		{
+			retVal = false;
+			std::cout << "error: " << dataVar1 << " not defined\n";
+		}
+		if(dataDefs_.count(dataVar2) ==0)
+		{
+			retVal = false;
+			std::cout << "error: " << dataVar2 << " not defined\n";
+		}
+	}
+
+	std::remove_if(line.begin(), line.end(), ::isspace), line.end();
+	if (line == "")
+	{
+		retVal = true;
 	}
 	return retVal;
 }
@@ -1240,13 +1263,14 @@ bool HlsGen::populateTimeFrames(void)
 	{
 		if (it->second.ASAPtimeFrame_ > minLatency)
 		{
+			validLatency = false;
 			minLatency = it->second.ASAPtimeFrame_;
 		}
 	}
 	latency_ = minLatency;
 	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
-		if ((it->second.ALAPtimeFrame_ >= latency_) || (it->second.ASAPtimeFrame_ >= latency_))
+		if ((it->second.ALAPtimeFrame_ > latency_) || (it->second.ASAPtimeFrame_ > latency_))
 		{
 			validLatency = false;
 			it->second.ASAPtimeFrame_ -= 1;// so it can be used to index into arrays/vectors
