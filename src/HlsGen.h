@@ -54,9 +54,11 @@ public:
 		ELSE,
 		PARENTHESIS1,
 		CONDITIONAL,
+		PARENTHESIS2,
 		BRACKETS,
 		OPERATION
-	};
+	}
+	currState_;
 
 	struct DataProp
 	{
@@ -82,6 +84,7 @@ public:
 	std::string fileName_;
 	std::string circuitName_;
 	std::map<int, int> bitsMapping_;
+	unsigned int latency_;
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief default constructor
@@ -143,16 +146,14 @@ public:
 	//@param std::map<unsigned int, Vertex>& opsDefs
 	//@return bool returns true on success, false otherwise
 	//////////////////////////////////////////////////////////////////////////////
-    bool parseConditionals(std::vector<unsigned int>&invalidLines, std::string fileName);
+    bool parseConditionals(std::string line);
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief parse individual line for operations
 	//@param std::string line
-	//@param std::map<unsigned int, Vertex>&condionalMap
-	//@param std::map<unsigned int, Vertex>& opsDefs
 	//@return bool returns true on success, false otherwise
 	//////////////////////////////////////////////////////////////////////////////
-	bool parseConditionalLine(std::string, HlsGen::ConditionalParseState& currState, unsigned int);
+	bool parseConditionalLine(std::string line);
 
 	//////////////////////////////////////////////////////////////////////////////
 	//@brief write the verilog header to file
@@ -226,13 +227,39 @@ public:
 	//////////////////////////////////////////////////////////////////////////////
 	bool isNumber(const std::string& str);
 	
+	//////////////////////////////////////////////////////////////////////////////
+	//@brief checks to see if a string is a number
+    //@param const std::string& str
+	//@return bool - true if input string is a number, false otherwise
+	//////////////////////////////////////////////////////////////////////////////
+	void setLatency(const unsigned int latency);
+
 	bool populateTimeFrames(void);
 	unsigned int getAsapTimes(std::string input, unsigned int layer);
+	unsigned int getAsapTimes2(std::string input, unsigned int layer);
 	unsigned int getAlapTimes(std::string vtx, unsigned int layer);
 	bool invertDag(void);
 	void addToInvDag(std::string);
+	static short isALU(Vertex::Operation op);
+	bool performScheduling(void);
+    void calculateDistributions(void);
+	void calculateSelfForces(void);
+	void scheduleNode(std::string vtxName, Vertex& vtx);
 	std::map<std::string, std::vector<std::string>>invDag_;
-	unsigned int latency_;
+	std::vector<float>aluProbDistVec_;
+	std::vector<float>multProbDistVec_;
+	std::vector<float>otherProbDistVec_;
+	bool updateDag(void);
+
+	std::map<unsigned int, std::vector<std::string>>schedule_;
+	std::map<unsigned int, std::vector<std::string>>multSchedule_;
+	std::stack<std::pair<std::string, std::string>>conditionalStack_;
+	std::vector<std::pair<std::string, std::string>>conditionalVec_;
+	std::string conditional_;
+
+	std::map<std::string, std::vector<std::string>>conditionalDependencies_;
+	void printOps(void);
+protected:
 };
 
 //////////////////////////////////////////////////////////////////////////////

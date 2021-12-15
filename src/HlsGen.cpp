@@ -5,11 +5,12 @@
 ////////////////////////////////////////////////////////////////////////
 
 #include "HlsGen.h"
+#include <regex>
 
 //////////////////////////////////////////////////////////////////////////////
 // see header file for method desription
 //////////////////////////////////////////////////////////////////////////////
-HlsGen::HlsGen(void)
+HlsGen::HlsGen(void):currState_(ConditionalParseState::IF)
 {
 	typesMap_["Int1"] = { 1, true };
 	typesMap_["Int2"] = { 2, true };
@@ -74,6 +75,14 @@ double HlsGen::getLatency(Vertex::Operation op, int bits)
 	return latencyMap_[op][bitsMapping_[bits]];
 }
 
+void HlsGen::printOps(void)
+{
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		std::cout << itr->first << ": " << itr->second.rawLine << "\n";
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // see header file for method desription
 //////////////////////////////////////////////////////////////////////////////
@@ -85,11 +94,7 @@ unsigned int HlsGen::parseFile(std::string filename)
 	circuitName_ = filename;
 
 	unsigned int retVal = 0;
-	if (!parseConditionals(invalidLines, filename))
-	{
-		retVal = 1;
-	}
-	else if (!parseData(invalidLines, file))
+	if (!parseData(invalidLines, file))
 	{
 		retVal = 1;
 	}
@@ -136,7 +141,8 @@ bool HlsGen::parseOps(std::vector<unsigned int>invalidLines, std::string fileNam
 {
 	std::ifstream file(fileName.c_str());
 	bool retVal(true);
-
+	bool isConditionalLine(false);
+	bool opsValid(true);
 	// first open the file to parse out the data types
 	if (file.is_open())
 	{
@@ -146,14 +152,25 @@ bool HlsGen::parseOps(std::vector<unsigned int>invalidLines, std::string fileNam
 		{
 			if (std::count(invalidLines.begin(), invalidLines.end(), a))
 			{
-				retVal = (parseOpsLine(line, opsDefs_) && retVal);
 				//the previous parse data function would have considered anything that was not 
 				//data related an invalid line. Therefore we only want to look at 'invalid' lines
+				if (!parseConditionals(line)) //if it is not a conditional line, parse as ops line
+				{
+					isConditionalLine = parseConditionalLine(line);
+					if (!isConditionalLine)
+					{
+						retVal = parseOpsLine(line, opsDefs_) ;
+						if (!retVal)
+						{
+							opsValid = false;
+						}
+					}
+				}
 			}
 			a++;
 		}
 	}
-	return retVal;
+	return opsValid;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -199,6 +216,11 @@ bool HlsGen::parseInputLine(std::string line, std::map<std::string, BaseType>& d
 				dType = BaseType::DataType::REGISTER;
 				parseState = DataParseState::DATA_TYPE;
 			}
+			else if (s.substr(start, end - start) == "variable")
+			{
+				dType = BaseType::DataType::VARIABLE;
+				parseState = DataParseState::DATA_TYPE;
+			}
 			break;
 		case DataParseState::DATA_TYPE:
 			if (typesMap_.find(s.substr(start, end - start)) != typesMap_.end())
@@ -227,6 +249,8 @@ bool HlsGen::parseInputLine(std::string line, std::map<std::string, BaseType>& d
 		{
 			BaseType data(isSigned, dataSize, dType);
 			dataDefs[*itr] = data;
+			dataDefs[*itr].original = true;
+
 		}
 	}
 	return (dType != BaseType::DataType::NONE) && (dataSize != 0);
@@ -241,100 +265,94 @@ bool HlsGen::parseInputLine(std::string line, std::map<std::string, BaseType>& d
 //////////////////////////////////////////////////////////////////////////////
 
 
-bool HlsGen::parseConditionals(std::vector<unsigned int>& invalidLines, std::string fileName)
+bool HlsGen::parseConditionals(std::string line)
 {
-	std::map<std::string, std::vector<std::string>>conditionalMap;
-	unsigned int stateNum;
 
-	ConditionalParseState state = ConditionalParseState::IF;
-
-	std::ifstream file(fileName.c_str());
-	bool retVal(true);
-
-	// first open the file to parse out the data types
-	if (file.is_open())
-	{
-		std::string line;
-		unsigned int a = 0;
-		while (getline(file, line))
-		{
-			retVal = (parseConditionalLine(line, state, stateNum) && retVal);
-			if (retVal == 1)
-			{
-				invalidLines.push_back(a);
-			}
-			//the previous parse data function would have considered anything that was not 
-			//data related an invalid line. Therefore we only want to look at 'invalid' lines
-			a++;
-		}
-	}
-	return retVal;
+	return false;
 }
 
-bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseState& currState,
-	unsigned int nested)
+bool HlsGen::parseConditionalLine(std::string line)
 {
 	std::string s = line + " "; //add ' ' for string parsing
 	bool lineValid(false);
 
 	std::vector<std::string>varNames;
 	std::string strName("");
-	std::string conditional("");
 	std::string operation("");
 
 	std::string delim = " ";
 	auto start = 0U;
 	auto end = s.find(delim);
+	ConditionalParseState prevState = currState_;
+	std::pair<std::string, std::string> conditionalPair; //contains an 'if/else' element as well as the conditional itself
+
 	while (end != std::string::npos)
 	{
-		std::string substring = s.substr(start, end - start);
-		switch (currState)
+    	std::string substring = s.substr(start, end - start);
+
+		substring.erase(std::remove_if(substring.begin(), substring.end(), ::isspace), substring.end());
+
+		switch (currState_)
 		{
-			std::cout << "state: " << (int)currState << std::endl;
-			std::cout << "substring: " << substring << std::endl;
-			std::cout << "conditional: " << conditional << std::endl;
-		case ConditionalParseState::IDLE:
-			if (substring == "if")
-			{
-				currState = ConditionalParseState::PARENTHESIS1;
-			}
-			break;
 		case ConditionalParseState::IF:
 			if (substring == "if")
 			{
-				currState = ConditionalParseState::PARENTHESIS1;
+				lineValid = true;
+				conditionalPair.first = "if";
+				currState_ = ConditionalParseState::PARENTHESIS1;
+			}
+			if (substring == "else")
+			{
+				lineValid = true;
+				conditionalPair.first = "else";
+				conditionalPair.second = conditional_;
+				conditionalStack_.push(conditionalPair);
+			}
+			if (substring == "}")
+			{
+				lineValid = true;
+				conditionalStack_.pop();//since we are not longer in the conditional, pop it off
+				currState_ = ConditionalParseState::IF;
 			}
 			break;
 		case ConditionalParseState::PARENTHESIS1:
 			if (substring == "(")
 			{
-				currState = ConditionalParseState::CONDITIONAL;
+				currState_ = ConditionalParseState::CONDITIONAL;
 			}
+			break;
 		case ConditionalParseState::CONDITIONAL:
 			if (substring != ")")
 			{
-				conditional += substring;
-				currState = ConditionalParseState::CONDITIONAL;
-			}
-			else
-			{
-				currState = ConditionalParseState::BRACKETS;
+				conditional_ = substring;
+				conditionalPair.second = conditional_;
+				conditionalStack_.push(conditionalPair);
+				currState_ = ConditionalParseState::PARENTHESIS2;
 			}
 			break;
+		case ConditionalParseState::PARENTHESIS2:
+			if (substring == ")")
+			{
+				currState_ = ConditionalParseState::BRACKETS;
+			}
 		case ConditionalParseState::BRACKETS:
 			if (substring == "{")
 			{
-				currState = ConditionalParseState::OPERATION;
+				currState_ = ConditionalParseState::IF;
 			}
 			break;
 		case ConditionalParseState::OPERATION:
 			if (substring == "}")
 			{
-				currState = ConditionalParseState::OPERATION;
-			}
-			else
-			{
-				conditional += substring;
+				try
+				{
+				    conditionalStack_.pop();//since we are not longer in the conditional, pop it off
+				}
+				catch(...)
+				{
+					//do some exception handling and error logging here
+				}
+				currState_ = ConditionalParseState::IF;
 			}
 			break;
 		default:
@@ -345,16 +363,7 @@ bool HlsGen::parseConditionalLine(std::string line, HlsGen::ConditionalParseStat
 		end = s.find(delim, start);
 	}
 
-	// for (std::vector<std::string>::iterator itr = varNames.begin(); itr < varNames.end(); itr++)
-	// {
-	// 	if (*itr != "")
-	// 	{
-	// 		BaseType data(isSigned, dataSize, dType);
-	// 		dataDefs[*itr] = data;
-	// 	}
-	// }
-	// return (dType != BaseType::DataType::NONE) && (dataSize != 0);
-	return false;
+	return lineValid;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -377,14 +386,13 @@ bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsD
 
 	while (end != std::string::npos)
 	{
-
 		std::string substring = s.substr(start, end - start);
+		substring.erase(std::remove_if(substring.begin(), substring.end(), ::isspace), substring.end());
 		switch (parseState)
 		{
 		case OpsParseState::OUTPUT_VAR:
 			if (substring != "")
 			{
-
 				outputVar = substring;
 				parseState = OpsParseState::EQUAL_SIGN;
 			}
@@ -451,6 +459,7 @@ bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsD
 		end = s.find(delim, start);
 	}
 
+	Vertex newElement;
 	if (parseState == OpsParseState::OP_EXTRACT)
 	{
 		op = Vertex::Operation::REG;
@@ -458,11 +467,41 @@ bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsD
 	}
 	if (parseState == OpsParseState::COMPLETE)
 	{
-		Vertex newElement;
+		std::stack<std::pair<std::string, std::string>>conditionalStack = conditionalStack_;
+		newElement.conditionals_ = conditionalStack_;
 		newElement.output_ = outputVar;
+		newElement.outputVar_ = outputVar;
 		newElement.inputs_[0] = dataVar1;
 		newElement.inputs_[1] = dataVar2;
 		newElement.inputs_[2] = dataVar3;
+		int idx = 3;
+		while(!conditionalStack.empty())
+		{
+			if (idx < 8)
+			{
+				newElement.inputs_[idx] = conditionalStack.top().second;
+				newElement.output_ = newElement.output_ + "_" + newElement.inputs_[idx];
+			}
+			conditionalStack.pop();
+			idx++;
+		}
+		if (newElement.conditionals_.size() > 0 && dataDefs_.count(newElement.output_) == 0)
+		{
+			BaseType newData;
+			newData.dataType_ = dataDefs_[outputVar].dataType_;
+			newData.dataWidth_ = dataDefs_[outputVar].dataWidth_;
+			dataDefs_[newElement.output_] = newData;
+			dataDefs_[newElement.output_].original = false;
+			if (conditionalDependencies_.find(outputVar) == conditionalDependencies_.end())
+			{
+				conditionalDependencies_[outputVar] = { newElement.output_ };
+			}
+			else
+			{
+				conditionalDependencies_[outputVar].push_back(newElement.output_);
+			}
+		}
+
 		newElement.op_ = op;
 		int vertexNum(0);
 		if (!opsDefs.empty())
@@ -470,7 +509,32 @@ bool HlsGen::parseOpsLine(std::string line, std::map<unsigned int, Vertex>& opsD
 			vertexNum = (--opsDefs.end())->first + 1;
 		}
 		opsDefs[vertexNum] = newElement;
-		opsDefs2_[outputVar] = newElement;
+		if (newElement.output_ != " ")
+		{
+		opsDefs2_[newElement.output_] = newElement;
+		}
+		opsDefs2_[newElement.output_].rawLine = line;
+		if (dataDefs_.count(outputVar) == 0)
+		{
+			retVal = false;
+			std::cout << "error: " << outputVar << " not defined\n";
+		}
+		if (dataDefs_.count(dataVar1) == 0)
+		{
+			retVal = false;
+			std::cout << "error: " << dataVar1 << " not defined\n";
+		}
+		if(dataDefs_.count(dataVar2) ==0)
+		{
+			retVal = false;
+			std::cout << "error: " << dataVar2 << " not defined\n";
+		}
+	}
+
+	std::remove_if(line.begin(), line.end(), ::isspace), line.end();
+	if (line == "")
+	{
+		retVal = true;
 	}
 	return retVal;
 }
@@ -507,7 +571,7 @@ void HlsGen::writeHeader(std::ofstream& outputStream)
 //////////////////////////////////////////////////////////////////////////////
 std::string HlsGen::moduleSignature(std::string outputFile)
 {
-	std::string writeLine = "module " + outputFile + " (Clk, Rst, ";
+	std::string writeLine = "module HLSM(Clk, Rst, Start, Done, ";
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
 		if (it->second.dataType_ == BaseType::DataType::INPUT)
@@ -519,7 +583,7 @@ std::string HlsGen::moduleSignature(std::string outputFile)
 
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
-		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
+		if (it->second.dataType_ == BaseType::DataType::OUTPUT && it->second.original)
 		{
 			writeLine += it->first;
 			writeLine += ", ";
@@ -536,36 +600,75 @@ std::string HlsGen::moduleSignature(std::string outputFile)
 //////////////////////////////////////////////////////////////////////////////
 void HlsGen::writeDataDefinitions(std::ofstream& outputStream)
 {
-	outputStream << "input Clk, Rst; \n";
+	outputStream << "input Clk, Rst, Start; \n";
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
 		if (it->second.dataType_ == BaseType::DataType::INPUT)
 		{
-			outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			if(it->second.original)
+			{
+			    outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			}
 		}
 	}
 	outputStream << "\n";
+	std::unordered_set<std::string>writeSetWire;
+
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
-		if (it->second.dataType_ == BaseType::DataType::WIRE)
-		{
-			outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			if (it->second.dataType_ == BaseType::DataType::WIRE)
+			{
+				if (it->second.original)
+				{
+					outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+					writeSetWire.insert(it->first);
+				}
 		}
 	}
 	outputStream << "\n";
+	std::unordered_set<std::string>writeSetOutput;
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
 		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
 		{
-			outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			if (it->second.original)
+			{
+				outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+				writeSetOutput.insert(it->first);
+			}
 		}
 	}
-	outputStream << "\n";
+	outputStream << "output reg Done; \n\n";
+	outputStream << "reg[" << std::ceil(std::log2(latency_)) << ":0] " "State; \n";
+	std::unordered_set<std::string>writeSetReg;
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
 		if (it->second.dataType_ == BaseType::DataType::REGISTER)
 		{
-			outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			if (it->second.original)
+			{
+				outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+				writeSetReg.insert(it->first);
+			}
+		}
+	}
+
+	outputStream << "\n";
+	for (int i = 0; i <= latency_+1; i++)
+	{
+	    outputStream << "parameter["<< std::ceil(std::log2(latency_)) << ":0]" << " S" << i <<"="<< i << ";\n"; 
+	}
+	outputStream << "\n";
+	std::unordered_set<std::string>writeSetVar;
+
+	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
+	{
+		if (it->second.dataType_ == BaseType::DataType::VARIABLE)
+		{
+			if (it->second.original)
+			{
+				outputStream << it->second.printDataType() << it->second.printDataWidth() << it->first << ";\n";
+			}
 		}
 	}
 	outputStream << "\n";
@@ -589,87 +692,89 @@ bool HlsGen::writeOperations(std::ofstream& outputStream)
 {
 	unsigned int uniqueNum(0);
 	bool retVal = true;
-	for (std::map<unsigned int, Vertex>::iterator it = opsDefs_.begin(); it != opsDefs_.end(); it++)
+
+    outputStream << "always @(posedge Clk) begin\n" << "if (Rst == 1) begin\n" << "\t\tDone <= 0;\nend\nelse begin\ncase (State)\n";
+	outputStream << "S0: begin\n";
+	outputStream << "\t\tif(Start == 1 ) begin\n";
+	outputStream << "\t\t\tState <= S1;\n";
+	outputStream << "\t\tend\n";
+	outputStream << "\t\telse begin\n";
+	outputStream << "\t\t\tState <= S0;\n";
+	outputStream << "\t\tend\n";
+	outputStream << "end\n";
+
+	for(int i = 0; i < latency_; i++)
 	{
-		switch (it->second.op_)
+		outputStream << "S" << i+1 << ": begin\n";
+		
+		for(std::vector<std::string>::iterator itr = schedule_[i].begin(); itr!= schedule_[i].end(); itr++)
 		{
-		case Vertex::Operation::NOP:
-			break;
-		case Vertex::Operation::REG:
-			if (dataDefs_.count(it->second.output_) == 0)
+			int numTabs = 2;
+			std::stack<std::pair<std::string, std::string>> conditionals = opsDefs2_[*itr].conditionals_;
+			while (!conditionals.empty())
 			{
-				retVal = false;
-			}
 
-			if (dataDefs_.count(it->second.inputs_[0]) == 0 && !isNumber(it->second.inputs_[0]))
-			{
-				retVal = false;
+				int tabIndex = numTabs;
+				while (tabIndex > 0)
+				{
+					tabIndex--;
+					outputStream << "\t";
+				}
+				if (conditionals.top().first == "if")
+				{
+					outputStream << conditionals.top().first << "(" << conditionals.top().second << ") begin\n";
+				}
+				else
+				{
+					outputStream << "if (~" << conditionals.top().second << ") begin\n";
+				}
+				conditionals.pop();
+
+				numTabs++;
 			}
-			break;
-		case Vertex::Operation::ADD:
-		case Vertex::Operation::SUB:
-		case Vertex::Operation::MULT:
-		case Vertex::Operation::SHR:
-		case Vertex::Operation::SHL:
-		case Vertex::Operation::DIV:
-		case Vertex::Operation::MOD:
-		case Vertex::Operation::INC:
-		case Vertex::Operation::DEC:
-		case Vertex::Operation::COMP_EQ:
-		case Vertex::Operation::COMP_LT:
-		case Vertex::Operation::COMP_GT:
-			if (dataDefs_.count(it->second.output_) == 0)
+			outputStream << "\t\t";
+			bool firstEq(false);
+			opsDefs2_[*itr].rawLine = std::regex_replace(opsDefs2_[*itr].rawLine, std::regex("^ +"), "");
+
+			for(int j = 0; j < opsDefs2_[*itr].rawLine.length(); j++)
 			{
-				retVal = false;
+				if(!firstEq && opsDefs2_[*itr].rawLine[j] == '=')
+				{
+					firstEq=true;
+					outputStream << "<";
+				}
+				outputStream << opsDefs2_[*itr].rawLine[j];
 			}
-			if (dataDefs_.count(it->second.inputs_[0]) == 0 && !isNumber(it->second.inputs_[0]))
+			outputStream << ";\n";
+			numTabs--;
+			conditionals = opsDefs2_[*itr].conditionals_;
+			while (!conditionals.empty())
 			{
-				retVal = false;
+				int tabIndex = numTabs;
+				while (tabIndex > 0)
+				{
+					outputStream << "\t";
+					tabIndex--;
+				}
+				outputStream << "end\n";
+				conditionals.pop();
+
+				numTabs--;
 			}
-			if (dataDefs_.count(it->second.inputs_[1]) == 0 && !isNumber(it->second.inputs_[1]))
-			{
-				retVal = false;
-			}
-			break;
-		case Vertex::Operation::MUX2x1:
-			if (dataDefs_.count(it->second.output_) == 0)
-			{
-				retVal = false;
-			}
-			if (dataDefs_.count(it->second.inputs_[0]) == 0 && !isNumber(it->second.inputs_[0]))
-			{
-				retVal = false;
-			}
-			if (dataDefs_.count(it->second.inputs_[1]) == 0 && !isNumber(it->second.inputs_[1]))
-			{
-				retVal = false;
-			}
-			if (dataDefs_.count(it->second.inputs_[2]) == 0 && !isNumber(it->second.inputs_[2]))
-			{
-				retVal = false;
-			}
-			break;
-		default:
-			std::cout << "\nERROR!\n";
 		}
+		outputStream << "\t\tState <= S" << i+1 <<";\n";
+		outputStream << "\tend\n";
 	}
+	outputStream << "S" << latency_+1 << ": begin\n";
+	outputStream << "\t\tDone <= 1;\n";
+	outputStream << "\t\tState <= S0" <<";\n";
+	outputStream << "\tend\n";
 
-	for (std::map<unsigned int, Vertex>::iterator it = opsDefs_.begin(); it != opsDefs_.end(); it++)
-	{
-		if ((dataDefs_[it->second.inputs_[0]].dataType_ == BaseType::DataType::INPUT) &&
-			dataDefs_[it->second.inputs_[1]].dataType_ == BaseType::DataType::INPUT)
-		{
-			outputStream << it->second.printMixedExtension(dataDefs_) << "\n";
-			uniqueNum++;
-		}
-	}
-
-	for (std::map<unsigned int, Vertex>::iterator it = opsDefs_.begin(); it != opsDefs_.end(); it++)
-	{
-		outputStream << it->second.printOp(dataDefs_, uniqueNum) << "\n";
-		uniqueNum++;
-	}
-	return retVal;
+	outputStream << "endcase\n";
+	outputStream << "end\n";
+	outputStream << "end\n";
+	outputStream << "endmodule\n";
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -696,7 +801,6 @@ bool HlsGen::generateVerilog(std::string outputFile)
 	{
 		std::cout << "error: missing data declaration detected\n";
 	}
-	outdata << "\nendmodule\n";
 	outdata.close();
 	return retVal;
 }
@@ -754,7 +858,7 @@ void HlsGen::createDag()
 
 	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < 8; i++)
 		{
 			if (it->second.inputs_[i] != "")
 			{
@@ -772,6 +876,7 @@ void HlsGen::createDag()
 			}
 		}
 	}
+
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -829,14 +934,14 @@ double HlsGen::determineCriticalPath(void)
 
 	outputStates_.clear();
 
-	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
+	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
-		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
+		if (dataDefs_[it->first].dataType_ == BaseType::DataType::OUTPUT)
 		{
 			//here we look up the operation using the key we are iterating through (ie 'x'), then we check
 			//if the input to that output was added to our list of registers, if it was not then we will add it 
 			//to our list of outputs
-			if (registers.count(opsDefs2_[it->first].inputs_[0]) == 0)
+			if (registers.count(it->second.inputs_[0]) == 0)
 			{
 				outputStates_.insert(it->first);
 			}
@@ -877,28 +982,30 @@ double HlsGen::determineCriticalPath(void)
 unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
+	unsigned int componentLatency = 1;
 	//if we are not in the terminal state (ie register, output etc)
-	//std::cout << "entering \n";
-	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+
+	if (opsDefs2_.count(vtx) > 0)
+	{
+		if (opsDefs2_.at(vtx).op_ == Vertex::Operation::MULT)
+		{
+			componentLatency = 2;
+		}
+		else if (opsDefs2_.at(vtx).op_ == Vertex::Operation::DIV ||
+			opsDefs2_.at(vtx).op_ == Vertex::Operation::MOD)
+		{
+			componentLatency = 3;
+		}
+		else
+		{
+			componentLatency = 1;
+		}
+	}
+
 	if (outputStates_.find(vtx) == outputStates_.end())
 	{
 		for (std::vector<std::string>::iterator it = dag_[vtx].begin(); it < dag_[vtx].end(); it++)
 		{
-			unsigned int componentLatency;
-			if (opsDefs2_[vtx].op_ == Vertex::Operation::MULT)
-			{
-				componentLatency = 2;
-			}
-			else if (opsDefs2_[vtx].op_ == Vertex::Operation::DIV ||
-				opsDefs2_[vtx].op_ == Vertex::Operation::MOD)
-			{
-				componentLatency = 3;
-			}
-			else
-			{
-				componentLatency = 1;
-			}
-
 			retVal = getAsapTimes(*it, layer + componentLatency);
 		}
 	}
@@ -909,12 +1016,74 @@ unsigned int HlsGen::getAsapTimes(std::string vtx, unsigned int layer)
 
 	//update the vertex's asap and alap time frames (we want to update to the largest)
 	//opsDefs2_[vtx].ALAPtimeFrame_ = retVal > opsDefs2_[vtx].ALAPtimeFrame_? retVal: opsDefs2_[vtx].ALAPtimeFrame_;
-	opsDefs2_[vtx].ASAPtimeFrame_ = layer > opsDefs2_[vtx].ASAPtimeFrame_ ? layer : opsDefs2_[vtx].ASAPtimeFrame_;
-	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
-	//std::cout << "exiting\n";
+	if (opsDefs2_.count(vtx) > 0)
+	{
+		if (dataDefs_.count(vtx) > 0)
+		{
+			if (dataDefs_.at(vtx).dataType_ != BaseType::DataType::INPUT)
+			{
+				opsDefs2_.at(vtx).ASAPtimeFrame_ = layer > opsDefs2_.at(vtx).ASAPtimeFrame_-1 ? layer : opsDefs2_.at(vtx).ASAPtimeFrame_-1;
+			}
+		}
+	}
+
 	return retVal;
 }
 
+unsigned int HlsGen::getAsapTimes2(std::string vtx, unsigned int layer)
+{
+	unsigned int retVal = 0;
+	unsigned int componentLatency = 1;
+	//if we are not in the terminal state (ie register, output etc)
+
+	if (opsDefs2_.count(vtx) > 0)
+	{
+		if (opsDefs2_.at(vtx).op_ == Vertex::Operation::MULT)
+		{
+			componentLatency = 2;
+		}
+		else if (opsDefs2_.at(vtx).op_ == Vertex::Operation::DIV ||
+			opsDefs2_.at(vtx).op_ == Vertex::Operation::MOD)
+		{
+			componentLatency = 3;
+		}
+		else
+		{
+			componentLatency = 1;
+		}
+	}
+
+	if (outputStates_.find(vtx) == outputStates_.end())
+	{
+		for (std::vector<std::string>::iterator it = dag_[vtx].begin(); it < dag_[vtx].end(); it++)
+		{
+			if (opsDefs2_.count(*it) > 0)
+			{
+			retVal = getAsapTimes2(*it, layer + componentLatency);
+			}
+		}
+	}
+	else
+	{
+		retVal = 0;
+	}
+
+	//update the vertex's asap and alap time frames (we want to update to the largest)
+	//opsDefs2_[vtx].ALAPtimeFrame_ = retVal > opsDefs2_[vtx].ALAPtimeFrame_? retVal: opsDefs2_[vtx].ALAPtimeFrame_;
+	if (opsDefs2_.count(vtx) > 0)
+	{
+		if (dataDefs_.count(vtx) > 0)
+		{
+			if (dataDefs_.at(vtx).dataType_ != BaseType::DataType::INPUT)
+			{
+				opsDefs2_.at(vtx).ASAPtimeFrame_ = layer > opsDefs2_.at(vtx).ASAPtimeFrame_ ? layer : opsDefs2_.at(vtx).ASAPtimeFrame_;
+			}
+		}
+	}
+
+	return retVal;
+
+}
 //////////////////////////////////////////////////////////////////////////////
 // see header file for method desription
 //////////////////////////////////////////////////////////////////////////////
@@ -922,21 +1091,23 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 {
 	unsigned int retVal = 0;
 	//if we are not in the terminal state (ie register, output etc)
-	//std::cout << "entering\n";
-	//std::cout << vtx << ", opsDefs2_[vtx].ASAPtimeFrame_: " << opsDefs2_[vtx].ASAPtimeFrame_ << ", layer: " << layer << std::endl;
+
 	unsigned int componentLatency(0);
-	if (opsDefs2_[vtx].op_ == Vertex::Operation::MULT)
+	if (opsDefs2_.count(vtx) > 0)
 	{
-		componentLatency = 2;
-	}
-	else if (opsDefs2_[vtx].op_ == Vertex::Operation::DIV ||
-		opsDefs2_[vtx].op_ == Vertex::Operation::MOD)
-	{
-		componentLatency = 3;
-	}
-	else
-	{
-		componentLatency = 1;
+		if (opsDefs2_.at(vtx).op_ == Vertex::Operation::MULT)
+		{
+			componentLatency = 2;
+		}
+		else if (opsDefs2_.at(vtx).op_ == Vertex::Operation::DIV ||
+			opsDefs2_.at(vtx).op_ == Vertex::Operation::MOD)
+		{
+			componentLatency = 3;
+		}
+		else
+		{
+			componentLatency = 1;
+		}
 	}
 	if (outputStates_.find(vtx) == outputStates_.end())
 	{
@@ -952,9 +1123,14 @@ unsigned int HlsGen::getAlapTimes(std::string vtx, unsigned int layer)
 	layer = layer + componentLatency - 1; //because we need to factor in the amount of time it takes to run this component
 
 	//update the vertex's asap and alap time frames (we want to update to the largest)
-	opsDefs2_[vtx].ALAPtimeFrame_ = layer > opsDefs2_[vtx].ALAPtimeFrame_ ? layer : opsDefs2_[vtx].ALAPtimeFrame_;
-	//std::cout << "exiting\n";
-	//std::cout << vtx << ", opsDefs2_[vtx].ALAPtimeFrame_: " << opsDefs2_[vtx].ALAPtimeFrame_ << ", layer: " << layer << std::endl;
+	if (opsDefs2_.count(vtx) > 0)
+	{
+		if (dataDefs_[vtx].dataType_ != BaseType::DataType::INPUT)
+		{
+			opsDefs2_.at(vtx).ALAPtimeFrame_ = layer > opsDefs2_.at(vtx).ALAPtimeFrame_ ? layer : opsDefs2_.at(vtx).ALAPtimeFrame_;
+		}
+	}
+
 	return retVal;
 }
 
@@ -971,33 +1147,65 @@ void HlsGen::addToInvDag(std::string vtx)
 			{
 				if (std::count(invDag_[vtx].begin(), invDag_[vtx].end(), it->first) == 0)
 				{
-					invDag_[vtx].push_back(it->first);
-					addToInvDag(it->first);
+					if (opsDefs2_.count(it->first) > 0)
+					{
+						invDag_[vtx].push_back(it->first);
+						addToInvDag(it->first);
+					}
 				}
 			}
 		}
 	}
 }
 
+bool HlsGen::updateDag(void)
+{
+	std::map<std::string, std::vector<std::string>>prevDag = dag_;
+
+	for (auto itrn = prevDag.begin(); itrn != prevDag.end(); itrn++)
+	{
+		if (conditionalDependencies_.count(itrn->first) > 0)
+		{
+			for (std::vector<std::string>::iterator itr2 = conditionalDependencies_[itrn->first].begin();
+				itr2 != conditionalDependencies_[itrn->first].end(); itr2++)
+			{
+				dag_[*itr2] = dag_[itrn->first];
+			}
+		}
+	}
+	return true;
+}
 bool HlsGen::invertDag(void)
 {
-	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
+	updateDag();
+
+	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
 		//iterate through all of the output variables
-		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
+		if (dataDefs_[it->first].dataType_ == BaseType::DataType::OUTPUT)
 		{
 			addToInvDag(it->first);
 		}
 	}
-	for (std::map<std::string, std::vector<std::string>>::iterator it = invDag_.begin(); it != invDag_.end(); it++)
+
+	//now iterate through the dag we just populated, if its dependency is in the dependency map, push those dependencies into dag too
+	std::map<std::string, std::vector<std::string>>prevDag = invDag_;
+
+	for (auto itrn = prevDag.begin(); itrn != prevDag.end(); itrn++)
 	{
-		std::cout << it->first << " : ";
-		for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++)
+		for (auto i = itrn->second.begin(); i != itrn->second.end(); i++)
 		{
-			std::cout << *it2 << " ";
+			if (conditionalDependencies_.count(*i) > 0)
+			{
+				for (std::vector<std::string>::iterator itr2 = conditionalDependencies_[*i].begin();
+					itr2 != conditionalDependencies_[*i].end(); itr2++)
+				{
+					invDag_[itrn->first].push_back(*itr2);
+				}
+			}
 		}
-		std::cout << std::endl;
 	}
+
 	return false;
 }
 
@@ -1008,9 +1216,9 @@ bool HlsGen::populateTimeFrames(void)
 {
 	outputStates_.clear();
 
-	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
+	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
-		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
+		if (dataDefs_[it->first].dataType_ == BaseType::DataType::OUTPUT)
 		{
 			//here we look up the operation using the key we are iterating through (ie 'x'), then we check
 			//if the input to that output was added to our list of registers, if it was not then we will add it 
@@ -1025,7 +1233,7 @@ bool HlsGen::populateTimeFrames(void)
 		{
 			num_iteration_ = 0;
 			unsigned int layer(0);
-			getAsapTimes(it->first, layer);
+			getAsapTimes2(it->first, layer);
 		}
 	}
 
@@ -1044,31 +1252,294 @@ bool HlsGen::populateTimeFrames(void)
 
 	for (std::map<std::string, BaseType>::iterator it = dataDefs_.begin(); it != dataDefs_.end(); it++)
 	{
-		if (it->second.dataType_ == BaseType::DataType::OUTPUT)
-		{
-			num_iteration_ = 0;
-			unsigned int layer(0);
-			getAlapTimes(it->first, layer);
-		}
+		num_iteration_ = 0;
+		unsigned int layer(0);
+		getAlapTimes(it->first, layer);
 	}
 
 	bool validLatency = true;
-	
+	unsigned int minLatency = latency_;
+	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
+	{
+		if (it->second.ASAPtimeFrame_ > minLatency)
+		{
+			validLatency = false;
+			minLatency = it->second.ASAPtimeFrame_;
+		}
+	}
+	latency_ = minLatency;
 	for (std::map<std::string, Vertex>::iterator it = opsDefs2_.begin(); it != opsDefs2_.end(); it++)
 	{
 		if ((it->second.ALAPtimeFrame_ > latency_) || (it->second.ASAPtimeFrame_ > latency_))
 		{
 			validLatency = false;
-		}
-		else
-		{
-			it->second.ALAPtimeFrame_ = latency_ - it->second.ALAPtimeFrame_;
+			it->second.ASAPtimeFrame_ -= 1;// so it can be used to index into arrays/vectors
+			it->second.ALAPtimeFrame_ = it->second.ASAPtimeFrame_;
 			it->second.timeFrame_[0] = it->second.ASAPtimeFrame_;
 			it->second.timeFrame_[1] = it->second.ALAPtimeFrame_;
 		}
-		std::cout << it->first << " : [" << it->second.timeFrame_[0] << ", " << it->second.timeFrame_[1] << "]" << std::endl;
+		else
+		{
+			it->second.ASAPtimeFrame_ -= 1;// so it can be used to index into arrays/vectors
+			it->second.ALAPtimeFrame_ = latency_ - it->second.ALAPtimeFrame_-1;
+			it->second.timeFrame_[0] = it->second.ASAPtimeFrame_;
+			it->second.timeFrame_[1] = it->second.ALAPtimeFrame_;
+		}
+
 	}
 	return validLatency;
+}
+//auxiliary method to determine if the op is grouped into ALU/MULT/ or other
+
+short HlsGen::isALU(Vertex::Operation op)
+{
+	short retVal = -1;
+	switch (op)
+	{
+		case Vertex::Operation::ADD:
+		case Vertex::Operation::SUB:
+		case Vertex::Operation::COMP:
+		case Vertex::Operation::COMP_EQ:
+		case Vertex::Operation::COMP_LT:
+		case Vertex::Operation::COMP_GT:
+		case Vertex::Operation::MUX2x1:	    
+		case Vertex::Operation::SHR:
+		case Vertex::Operation::SHL:
+		case Vertex::Operation::INC:
+		case Vertex::Operation::DEC:
+			retVal = 1;
+			break;
+		case Vertex::Operation::MULT:
+		case Vertex::Operation::DIV:
+		case Vertex::Operation::MOD:
+			retVal = 0;
+			break;
+		case Vertex::Operation::ASSIGN:
+		case Vertex::Operation::NOP:
+		case Vertex::Operation::REG:
+			retVal = 1;
+			break;
+	}
+	return retVal;	
+}
+
+void HlsGen::setLatency(const unsigned int latency)
+{
+	latency_ = latency;
+	for (int i = 0; i < latency; i++)
+	{
+		aluProbDistVec_.push_back(0.0);
+		multProbDistVec_.push_back(0.0);
+		otherProbDistVec_.push_back(0.0);
+		schedule_[i] = {};
+	}
+}
+
+bool HlsGen::performScheduling(void)
+{
+	calculateDistributions();
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		if (dataDefs_[itr->first].dataType_ != BaseType::DataType::INPUT)
+		{
+			calculateSelfForces();
+ 			scheduleNode(itr->first, itr->second);
+		}
+	}
+	//for (int i = 0; i < latency_; i++)
+	//{
+	//	std::cout << "timeframe " << i << ": ";
+	//	for (std::vector<std::string>::iterator itr = schedule_[i].begin(); itr != schedule_[i].end(); itr++)
+	//	{
+	//		std::cout << *itr << " ";
+	//	}
+	//	std::cout << std::endl;
+	//}
+	return true;
+}
+
+void HlsGen::scheduleNode(std::string vtxName, Vertex& vtx)
+{
+	std::vector<float> totalForce;
+	for (int i = 0; i < latency_; i++)
+	{
+		//initialize total forces as the self force at each time frame
+		totalForce.push_back(vtx.selfForceVector[i]);
+	}
+
+	for (int i = 0; i < latency_; i++)
+	{
+		//get precedessor forces at each time step using the inverted DAG 
+		float predecessorForces = 0.0;
+		for (std::vector<std::string>::iterator itr = invDag_[vtxName].begin(); itr != invDag_[vtxName].end(); itr++)
+		{
+			// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+			// at timeFrame i, add in the self force of it's predecessor at time frame i.
+			if (opsDefs2_.count(*itr) != 0)
+			{
+				if (opsDefs2_[*itr].inRange(i))
+				{
+					predecessorForces += opsDefs2_[*itr].selfForceVector[i];
+				}
+			}
+		}
+		totalForce.at(i) += predecessorForces;
+
+	    //get successor forces at each time step using the inverted DAG 
+		float successorForces = 0.0;
+		for (std::vector<std::string>::iterator itr = dag_[vtxName].begin(); itr != dag_[vtxName].end(); itr++)
+		{
+			// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+			// at timeFrame i, add in the self force of it's predecessor at time frame i.
+			if (opsDefs2_.count(*itr) != 0)
+			{
+				if (opsDefs2_[*itr].inRange(i))
+				{
+					successorForces += opsDefs2_[*itr].selfForceVector[i];
+				}
+			}
+		}
+		totalForce.at(i) += successorForces;
+	}
+	int minIndex = opsDefs2_[vtxName].ASAPtimeFrame_;
+
+	if (opsDefs2_[vtxName].ASAPtimeFrame_ == opsDefs2_[vtxName].ALAPtimeFrame_)
+	{
+		schedule_[opsDefs2_[vtxName].ASAPtimeFrame_].push_back(vtxName);
+	}
+	else
+	{
+		for (int i = opsDefs2_[vtxName].ALAPtimeFrame_; i >= opsDefs2_[vtxName].ASAPtimeFrame_ || i > 0 ; i--)
+		{
+			if (i >= 0)
+			{
+				if (totalForce[i] <= totalForce[minIndex])
+				{
+					minIndex = i;
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+		schedule_[minIndex].push_back(vtxName);
+		vtx.ALAPtimeFrame_ = minIndex;
+		vtx.ASAPtimeFrame_ = minIndex;
+	}
+
+
+	for (std::vector<std::string>::iterator itr = invDag_[vtxName].begin(); itr != invDag_[vtxName].end(); itr++)
+	{
+		// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+		// at timeFrame i, add in the self force of it's predecessor at time frame i.
+		if (opsDefs2_.count(*itr) != 0)
+		{
+			if (opsDefs2_[*itr].inRange(minIndex))
+			{
+				opsDefs2_[*itr].ALAPtimeFrame_ = minIndex - 1; //its frame no longer includes minElementIndex + 1
+			}
+		}
+	}
+
+	for (std::vector<std::string>::iterator itr = dag_[vtxName].begin(); itr != dag_[vtxName].end(); itr++)
+	{
+		// if scheduling the current vertex at time frame i limits the predecessor's ability to schedule
+		// at timeFrame i, add in the self force of it's predecessor at time frame i.
+		if (opsDefs2_[*itr].inRange(minIndex))
+		{
+			opsDefs2_[*itr].ASAPtimeFrame_ = minIndex + 1;
+		}
+	}
+}
+
+void HlsGen::calculateSelfForces(void)
+{
+	for (std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+		//initialize vectors
+		if (isALU(itr->second.op_) == 1)
+		{
+			for (int i = 0; i < latency_; i++)
+			{
+				float selfForce = 0.0f;
+				for (int j = 0; j < latency_; j++)
+				{
+					if (i == j)
+					{
+						selfForce += aluProbDistVec_[j] * (1 - itr->second.prob(j + 1));
+					}
+					else
+					{
+						selfForce += aluProbDistVec_[j] * (0 - itr->second.prob(j + 1));
+					}
+				}
+
+			itr->second.setSelfForce(selfForce, i);
+			}
+		}
+		else if (isALU(itr->second.op_) == 0)
+		{
+			for (int i = 0; i < latency_; i++)
+			{
+				float selfForce = 0.0f;
+				for (int j = 0; j < latency_; j++)
+				{
+					if (i == j)
+					{
+						selfForce += multProbDistVec_[j] * (1 - itr->second.prob(j + 1));
+					}
+					else
+					{
+						selfForce += multProbDistVec_[j] * (0 - itr->second.prob(j + 1));
+					}
+				}
+				itr->second.setSelfForce(selfForce, i);
+			}
+		}
+		else if (isALU(itr->second.op_) == -1)
+		{
+			for (int i = 0; i < latency_; i++)
+			{
+				itr->second.setSelfForce(0.0, i);
+			}
+		}
+	}
+}
+void HlsGen::calculateDistributions(void)
+{
+	setLatency(latency_);
+
+	for (int i = 0; i < latency_; i++)
+	{
+		aluProbDistVec_[i] = 0.0f;
+		multProbDistVec_[i] = 0.0f;
+		otherProbDistVec_[i] = 0.0f;
+	}
+	for(std::map<std::string, Vertex>::iterator itr = opsDefs2_.begin(); itr != opsDefs2_.end(); itr++)
+	{
+        if(isALU(itr->second.op_) == 1)
+		{
+			for(int i = 0 ; i < latency_; i++)
+			{
+            	aluProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+	    else if(isALU(itr->second.op_) == 0)
+		{
+			for(int i = 0 ; i < latency_; i++)
+			{
+            	multProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+		else if(isALU(itr->second.op_) == -1)
+		{
+			for(int i = 0 ; i < latency_; i++)
+			{
+            	otherProbDistVec_[i] += itr->second.prob(i+1);
+			}
+		}
+	}
 }
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
